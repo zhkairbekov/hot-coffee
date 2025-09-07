@@ -3,7 +3,7 @@ hot-coffee
 hot-coffee.exe
 
 # Data files (optional - remove if you want to track sample data)
-data/
+/data
 
 # Go module cache
 go.sum
