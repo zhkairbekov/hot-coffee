@@ -1,130 +1,132 @@
+// internal/handler/menu_handler.go
 package handler
 
 import (
 	"encoding/json"
+	"log/slog"
 	"net/http"
-	"strings"
 
 	"hot-coffee/internal/service"
 	"hot-coffee/models"
 )
 
 type MenuHandler struct {
-	service *service.MenuService
+	menuService service.MenuService
 }
 
-func NewMenuHandler(service *service.MenuService) *MenuHandler {
-	return &MenuHandler{service: service}
-}
-
-func (h *MenuHandler) HandleMenu(w http.ResponseWriter, r *http.Request) {
-	switch r.Method {
-	case http.MethodGet:
-		h.getAllMenu(w, r)
-	case http.MethodPost:
-		h.createMenuItem(w, r)
-	default:
-		writeErrorJSON(w, "method not allowed", http.StatusMethodNotAllowed)
+func NewMenuHandler(menuService service.MenuService) *MenuHandler {
+	return &MenuHandler{
+		menuService: menuService,
 	}
 }
 
-func (h *MenuHandler) HandleMenuByID(w http.ResponseWriter, r *http.Request) {
-	id := strings.TrimPrefix(r.URL.Path, "/menu/")
-	if id == "" {
-		writeErrorJSON(w, "product ID is required", http.StatusBadRequest)
-		return
-	}
-
-	switch r.Method {
-	case http.MethodGet:
-		h.getMenuItem(w, r, id)
-	case http.MethodPut:
-		h.updateMenuItem(w, r, id)
-	case http.MethodDelete:
-		h.deleteMenuItem(w, r, id)
-	default:
-		writeErrorJSON(w, "method not allowed", http.StatusMethodNotAllowed)
-	}
-}
-
-func (h *MenuHandler) getAllMenu(w http.ResponseWriter, r *http.Request) {
-	items, err := h.service.GetMenu()
-	if err != nil {
-		writeErrorJSON(w, "failed to retrieve menu", http.StatusInternalServerError)
-		return
-	}
-	writeJSON(w, items)
-}
-
-func (h *MenuHandler) createMenuItem(w http.ResponseWriter, r *http.Request) {
+func (h *MenuHandler) CreateMenuItem(w http.ResponseWriter, r *http.Request) {
 	var item models.MenuItem
 	if err := json.NewDecoder(r.Body).Decode(&item); err != nil {
-		writeErrorJSON(w, "invalid JSON format", http.StatusBadRequest)
+		slog.Warn("Invalid JSON in create menu item request", "error", err)
+		writeErrorResponse(w, "Invalid JSON format", http.StatusBadRequest)
 		return
 	}
 
-	// Валидация
-	if item.ID == "" {
-		writeErrorJSON(w, "product ID is required", http.StatusBadRequest)
-		return
-	}
-	if item.Name == "" {
-		writeErrorJSON(w, "product name is required", http.StatusBadRequest)
-		return
-	}
-	if item.Price <= 0 {
-		writeErrorJSON(w, "price must be positive", http.StatusBadRequest)
+	if err := validateMenuItem(&item); err != nil {
+		slog.Warn("Menu item validation failed", "error", err)
+		writeErrorResponse(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
-	if err := h.service.AddMenuItem(item); err != nil {
-		writeErrorJSON(w, err.Error(), http.StatusBadRequest)
+	if err := h.menuService.CreateMenuItem(&item); err != nil {
+		slog.Error("Failed to create menu item", "error", err)
+		writeErrorResponse(w, "Internal server error", http.StatusInternalServerError)
 		return
 	}
 
+	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
-	writeJSON(w, map[string]string{"status": "created"})
+	json.NewEncoder(w).Encode(item)
 }
 
-func (h *MenuHandler) getMenuItem(w http.ResponseWriter, r *http.Request, id string) {
-	item, err := h.service.GetMenuItem(id)
+func (h *MenuHandler) GetAllMenuItems(w http.ResponseWriter, r *http.Request) {
+	items, err := h.menuService.GetAllMenuItems()
 	if err != nil {
-		writeErrorJSON(w, "menu item not found", http.StatusNotFound)
+		slog.Error("Failed to get all menu items", "error", err)
+		writeErrorResponse(w, "Internal server error", http.StatusInternalServerError)
 		return
 	}
-	writeJSON(w, item)
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(items)
 }
 
-func (h *MenuHandler) updateMenuItem(w http.ResponseWriter, r *http.Request, id string) {
+func (h *MenuHandler) GetMenuItem(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	if id == "" {
+		writeErrorResponse(w, "Menu item ID is required", http.StatusBadRequest)
+		return
+	}
+
+	item, err := h.menuService.GetMenuItemByID(id)
+	if err != nil {
+		slog.Error("Failed to get menu item", "itemID", id, "error", err)
+		writeErrorResponse(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
+
+	if item == nil {
+		writeErrorResponse(w, "Menu item not found", http.StatusNotFound)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(item)
+}
+
+func (h *MenuHandler) UpdateMenuItem(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	if id == "" {
+		writeErrorResponse(w, "Menu item ID is required", http.StatusBadRequest)
+		return
+	}
+
 	var item models.MenuItem
 	if err := json.NewDecoder(r.Body).Decode(&item); err != nil {
-		writeErrorJSON(w, "invalid JSON format", http.StatusBadRequest)
+		slog.Warn("Invalid JSON in update menu item request", "error", err)
+		writeErrorResponse(w, "Invalid JSON format", http.StatusBadRequest)
 		return
 	}
 
 	item.ID = id
+	if err := validateMenuItem(&item); err != nil {
+		slog.Warn("Menu item validation failed", "error", err)
+		writeErrorResponse(w, err.Error(), http.StatusBadRequest)
+		return
+	}
 
-	if err := h.service.UpdateMenuItem(item); err != nil {
-		if strings.Contains(err.Error(), "not found") {
-			writeErrorJSON(w, "menu item not found", http.StatusNotFound)
+	if err := h.menuService.UpdateMenuItem(&item); err != nil {
+		slog.Error("Failed to update menu item", "itemID", id, "error", err)
+		if err.Error() == "menu item not found" {
+			writeErrorResponse(w, err.Error(), http.StatusNotFound)
 		} else {
-			writeErrorJSON(w, err.Error(), http.StatusBadRequest)
+			writeErrorResponse(w, err.Error(), http.StatusInternalServerError)
 		}
 		return
 	}
 
-	writeJSON(w, map[string]string{"status": "updated"})
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(item)
 }
 
-func (h *MenuHandler) deleteMenuItem(w http.ResponseWriter, r *http.Request, id string) {
-	if err := h.service.DeleteMenuItem(id); err != nil {
-		if strings.Contains(err.Error(), "not found") {
-			writeErrorJSON(w, "menu item not found", http.StatusNotFound)
-		} else {
-			writeErrorJSON(w, err.Error(), http.StatusInternalServerError)
-		}
+func (h *MenuHandler) DeleteMenuItem(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	if id == "" {
+		writeErrorResponse(w, "Menu item ID is required", http.StatusBadRequest)
 		return
 	}
 
-	writeJSON(w, map[string]string{"status": "deleted"})
+	if err := h.menuService.DeleteMenuItem(id); err != nil {
+		slog.Error("Failed to delete menu item", "itemID", id, "error", err)
+		writeErrorResponse(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
 }

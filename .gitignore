@@ -1,0 +1,39 @@
+# Binaries
+hot-coffee
+hot-coffee.exe
+
+# Data files (optional - remove if you want to track sample data)
+data/
+
+# Go module cache
+go.sum
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
+
+// docker/Dockerfile (optional)
+FROM golang:1.23-alpine AS builder
+
+WORKDIR /app
+COPY go.mod go.sum ./
+RUN go mod download
+
+COPY . .
+RUN go build -o hot-coffee .
+
+FROM alpine:latest
+RUN apk --no-cache add ca-certificates
+WORKDIR /root/
+
+COPY --from=builder /app/hot-coffee .
+RUN mkdir -p data
+
+EXPOSE 8080
+CMD ["./hot-coffee", "--port", "8080", "--dir", "./data"]

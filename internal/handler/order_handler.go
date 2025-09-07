@@ -1,167 +1,152 @@
+// internal/handler/order_handler.go
 package handler
 
 import (
 	"encoding/json"
+	"log/slog"
 	"net/http"
-	"strings"
 
 	"hot-coffee/internal/service"
 	"hot-coffee/models"
 )
 
 type OrderHandler struct {
-	service *service.OrderService
+	orderService service.OrderService
 }
 
-func NewOrderHandler(service *service.OrderService) *OrderHandler {
-	return &OrderHandler{service: service}
-}
-
-func (h *OrderHandler) HandleOrders(w http.ResponseWriter, r *http.Request) {
-	switch r.Method {
-	case http.MethodGet:
-		h.getAllOrders(w, r)
-	case http.MethodPost:
-		h.createOrder(w, r)
-	default:
-		writeErrorJSON(w, "method not allowed", http.StatusMethodNotAllowed)
+func NewOrderHandler(orderService service.OrderService) *OrderHandler {
+	return &OrderHandler{
+		orderService: orderService,
 	}
 }
 
-func (h *OrderHandler) HandleOrderByID(w http.ResponseWriter, r *http.Request) {
-	path := strings.TrimPrefix(r.URL.Path, "/orders/")
-	parts := strings.Split(path, "/")
-
-	if len(parts) == 0 || parts[0] == "" {
-		writeErrorJSON(w, "order ID is required", http.StatusBadRequest)
-		return
-	}
-
-	orderID := parts[0]
-
-	// Проверяем, есть ли дополнительные части пути
-	if len(parts) > 1 && parts[1] == "close" {
-		if r.Method == http.MethodPost {
-			h.closeOrder(w, r, orderID)
-		} else {
-			writeErrorJSON(w, "method not allowed", http.StatusMethodNotAllowed)
-		}
-		return
-	}
-
-	// Обычные CRUD операции
-	switch r.Method {
-	case http.MethodGet:
-		h.getOrder(w, r, orderID)
-	case http.MethodPut:
-		h.updateOrder(w, r, orderID)
-	case http.MethodDelete:
-		h.deleteOrder(w, r, orderID)
-	default:
-		writeErrorJSON(w, "method not allowed", http.StatusMethodNotAllowed)
-	}
-}
-
-func (h *OrderHandler) getAllOrders(w http.ResponseWriter, r *http.Request) {
-	orders, err := h.service.GetAllOrders()
-	if err != nil {
-		writeErrorJSON(w, "failed to retrieve orders", http.StatusInternalServerError)
-		return
-	}
-	writeJSON(w, orders)
-}
-
-func (h *OrderHandler) createOrder(w http.ResponseWriter, r *http.Request) {
+func (h *OrderHandler) CreateOrder(w http.ResponseWriter, r *http.Request) {
 	var order models.Order
 	if err := json.NewDecoder(r.Body).Decode(&order); err != nil {
-		writeErrorJSON(w, "invalid JSON format", http.StatusBadRequest)
+		slog.Warn("Invalid JSON in create order request", "error", err)
+		writeErrorResponse(w, "Invalid JSON format", http.StatusBadRequest)
 		return
 	}
 
-	// Валидация
-	if order.CustomerName == "" {
-		writeErrorJSON(w, "customer name is required", http.StatusBadRequest)
+	if err := validateOrder(&order); err != nil {
+		slog.Warn("Order validation failed", "error", err)
+		writeErrorResponse(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
-	if len(order.Items) == 0 {
-		writeErrorJSON(w, "order must contain at least one item", http.StatusBadRequest)
+	if err := h.orderService.CreateOrder(&order); err != nil {
+		slog.Error("Failed to create order", "error", err)
+		writeErrorResponse(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
-	for i, item := range order.Items {
-		if item.ProductID == "" {
-			writeErrorJSON(w, "product ID is required for all items", http.StatusBadRequest)
-			return
-		}
-		if item.Quantity <= 0 {
-			writeErrorJSON(w, "quantity must be positive", http.StatusBadRequest)
-			return
-		}
-		order.Items[i] = item
-	}
-
-	if err := h.service.CreateOrder(order); err != nil {
-		writeErrorJSON(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-
+	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
-	writeJSON(w, map[string]string{"status": "created", "order_id": order.ID})
+	json.NewEncoder(w).Encode(order)
 }
 
-func (h *OrderHandler) getOrder(w http.ResponseWriter, r *http.Request, orderID string) {
-	order, err := h.service.GetOrder(orderID)
+func (h *OrderHandler) GetAllOrders(w http.ResponseWriter, r *http.Request) {
+	orders, err := h.orderService.GetAllOrders()
 	if err != nil {
-		writeErrorJSON(w, "order not found", http.StatusNotFound)
+		slog.Error("Failed to get all orders", "error", err)
+		writeErrorResponse(w, "Internal server error", http.StatusInternalServerError)
 		return
 	}
-	writeJSON(w, order)
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(orders)
 }
 
-func (h *OrderHandler) updateOrder(w http.ResponseWriter, r *http.Request, orderID string) {
+func (h *OrderHandler) GetOrder(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	if id == "" {
+		writeErrorResponse(w, "Order ID is required", http.StatusBadRequest)
+		return
+	}
+
+	order, err := h.orderService.GetOrderByID(id)
+	if err != nil {
+		slog.Error("Failed to get order", "orderID", id, "error", err)
+		writeErrorResponse(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
+
+	if order == nil {
+		writeErrorResponse(w, "Order not found", http.StatusNotFound)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(order)
+}
+
+func (h *OrderHandler) UpdateOrder(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	if id == "" {
+		writeErrorResponse(w, "Order ID is required", http.StatusBadRequest)
+		return
+	}
+
 	var order models.Order
 	if err := json.NewDecoder(r.Body).Decode(&order); err != nil {
-		writeErrorJSON(w, "invalid JSON format", http.StatusBadRequest)
+		slog.Warn("Invalid JSON in update order request", "error", err)
+		writeErrorResponse(w, "Invalid JSON format", http.StatusBadRequest)
 		return
 	}
 
-	order.ID = orderID
+	order.ID = id
+	if err := validateOrder(&order); err != nil {
+		slog.Warn("Order validation failed", "error", err)
+		writeErrorResponse(w, err.Error(), http.StatusBadRequest)
+		return
+	}
 
-	if err := h.service.UpdateOrder(order); err != nil {
-		if strings.Contains(err.Error(), "not found") {
-			writeErrorJSON(w, "order not found", http.StatusNotFound)
+	if err := h.orderService.UpdateOrder(&order); err != nil {
+		slog.Error("Failed to update order", "orderID", id, "error", err)
+		if err.Error() == "order not found" {
+			writeErrorResponse(w, err.Error(), http.StatusNotFound)
 		} else {
-			writeErrorJSON(w, err.Error(), http.StatusBadRequest)
+			writeErrorResponse(w, err.Error(), http.StatusInternalServerError)
 		}
 		return
 	}
 
-	writeJSON(w, map[string]string{"status": "updated"})
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(order)
 }
 
-func (h *OrderHandler) deleteOrder(w http.ResponseWriter, r *http.Request, orderID string) {
-	if err := h.service.DeleteOrder(orderID); err != nil {
-		if strings.Contains(err.Error(), "not found") {
-			writeErrorJSON(w, "order not found", http.StatusNotFound)
-		} else {
-			writeErrorJSON(w, err.Error(), http.StatusInternalServerError)
-		}
+func (h *OrderHandler) DeleteOrder(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	if id == "" {
+		writeErrorResponse(w, "Order ID is required", http.StatusBadRequest)
 		return
 	}
 
-	writeJSON(w, map[string]string{"status": "deleted"})
+	if err := h.orderService.DeleteOrder(id); err != nil {
+		slog.Error("Failed to delete order", "orderID", id, "error", err)
+		writeErrorResponse(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
 }
 
-func (h *OrderHandler) closeOrder(w http.ResponseWriter, r *http.Request, orderID string) {
-	if err := h.service.CloseOrder(orderID); err != nil {
-		if strings.Contains(err.Error(), "not found") {
-			writeErrorJSON(w, "order not found", http.StatusNotFound)
+func (h *OrderHandler) CloseOrder(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	if id == "" {
+		writeErrorResponse(w, "Order ID is required", http.StatusBadRequest)
+		return
+	}
+
+	if err := h.orderService.CloseOrder(id); err != nil {
+		slog.Error("Failed to close order", "orderID", id, "error", err)
+		if err.Error() == "order not found" {
+			writeErrorResponse(w, err.Error(), http.StatusNotFound)
 		} else {
-			writeErrorJSON(w, err.Error(), http.StatusBadRequest)
+			writeErrorResponse(w, err.Error(), http.StatusInternalServerError)
 		}
 		return
 	}
 
-	writeJSON(w, map[string]string{"status": "closed"})
+	w.WriteHeader(http.StatusNoContent)
 }

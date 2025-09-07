@@ -1,189 +1,204 @@
-# hot-coffee — Coffee Shop Management System
+// README.md
+# Hot Coffee - Coffee Shop Management System
 
-**In short:** A REST backend for a coffee shop built with Go (standard library only). Data is stored in JSON files, the project follows a three-layer architecture (Handlers → Services → Repositories), and logging is done using `log/slog`.
-
----
+A RESTful API service for managing coffee shop operations including orders, menu items, and inventory.
 
 ## Features
 
-* **Orders**: Create, retrieve, update, delete, and close orders.
-* **Menu**: CRUD operations for menu items (with ingredients and prices).
-* **Inventory**: CRUD operations for ingredients (units and stock levels).
-* **Reports**: Total sales and popular menu items.
-* **Inventory Management**: Automatically checks and deducts stock when processing orders.
+- **Order Management**: Create, update, delete, and close orders
+- **Menu Management**: Manage coffee shop menu items with ingredients
+- **Inventory Management**: Track ingredient stock levels
+- **Automatic Inventory Deduction**: Stock is automatically updated when orders are processed
+- **Reports**: Get total sales and popular items analytics
+- **JSON File Storage**: All data persisted in JSON files
+- **Layered Architecture**: Clean separation between presentation, business logic, and data layers
 
-## Architecture
+## Quick Start
 
-Three-layer design:
-
-* **Presentation (handlers)** — HTTP endpoints, request validation, and response codes.
-* **Business (services)** — Business logic, aggregations, and inventory rules.
-* **Data Access (repositories / dal)** — Reads and writes JSON files (stored in the `data/` directory).
-
-```
-hot-coffee/
-├── cmd/
-│   └── main.go                 # Entry point, starts HTTP server
-├── internal/
-│   ├── handler/                # HTTP handlers (net/http)
-│   ├── service/                # Business logic
-│   └── dal/                    # JSON repositories
-├── models/                     # Data models
-├── data/                       # *.json files (created at first run)
-├── go.mod
-└── go.sum
-```
-
-## Data Models (simplified)
-
-```go
-// models/order.go
-type Order struct {
-    ID           string      `json:"order_id"`
-    CustomerName string      `json:"customer_name"`
-    Items        []OrderItem `json:"items"`
-    Status       string      `json:"status"` // open|closed
-    CreatedAt    string      `json:"created_at"` // RFC3339
-}
-
-type OrderItem struct {
-    ProductID string `json:"product_id"`
-    Quantity  int    `json:"quantity"`
-}
-```
-
-```go
-// models/menu_item.go
-type MenuItem struct {
-  ID          string               `json:"product_id"`
-  Name        string               `json:"name"`
-  Description string               `json:"description"`
-  Price       float64              `json:"price"`
-  Ingredients []MenuItemIngredient `json:"ingredients"`
-}
-
-type MenuItemIngredient struct {
-  IngredientID string  `json:"ingredient_id"`
-  Quantity     float64 `json:"quantity"`
-}
-```
-
-```go
-// models/inventory_item.go
-type InventoryItem struct {
-  IngredientID string  `json:"ingredient_id"`
-  Name         string  `json:"name"`
-  Quantity     float64 `json:"quantity"`
-  Unit         string  `json:"unit"` // g|ml|shots|...
-}
-```
-
-## Build and Run
-
-Requirements: Go 1.22+, standard library only.
-
+### Build the application
 ```bash
 go build -o hot-coffee .
-./hot-coffee --port 8080 --dir ./data
 ```
 
-### Help
+### Run with default settings
+```bash
+./hot-coffee
+```
 
+### Run with custom port and data directory
+```bash
+./hot-coffee --port 3000 --dir ./my-data
+```
+
+### Show help
 ```bash
 ./hot-coffee --help
-```
-
-Output:
-
-```
-Coffee Shop Management System
-
-Usage:
-  hot-coffee [--port <N>] [--dir <S>]
-  hot-coffee --help
-
-Options:
-  --help       Show this screen.
-  --port N     Port number.
-  --dir S      Path to the data directory.
-```
-
-## Data Storage
-
-Stored in the `data/` directory:
-
-* `orders.json`
-* `menu_items.json`
-* `inventory.json`
-
-Each file contains an array of objects and is created automatically.
-
-## Logging
-
-Uses Go's `log/slog` with Info/Warn/Error levels and context (IDs, paths, status codes, errors).
-
-```go
-slog.Info("order created", "orderID", id)
-slog.Error("inventory update failed", "err", err)
 ```
 
 ## API Endpoints
 
 ### Orders
+- `POST /orders` - Create a new order
+- `GET /orders` - Get all orders
+- `GET /orders/{id}` - Get specific order
+- `PUT /orders/{id}` - Update order
+- `DELETE /orders/{id}` - Delete order
+- `POST /orders/{id}/close` - Close order
 
-* `POST   /orders`
-* `GET    /orders`
-* `GET    /orders/{id}`
-* `PUT    /orders/{id}`
-* `DELETE /orders/{id}`
-* `POST   /orders/{id}/close`
-
-### Menu
-
-* `POST   /menu`
-* `GET    /menu`
-* `GET    /menu/{id}`
-* `PUT    /menu/{id}`
-* `DELETE /menu/{id}`
+### Menu Items
+- `POST /menu` - Add menu item
+- `GET /menu` - Get all menu items
+- `GET /menu/{id}` - Get specific menu item
+- `PUT /menu/{id}` - Update menu item
+- `DELETE /menu/{id}` - Delete menu item
 
 ### Inventory
-
-* `POST   /inventory`
-* `GET    /inventory`
-* `GET    /inventory/{id}`
-* `PUT    /inventory/{id}`
-* `DELETE /inventory/{id}`
+- `POST /inventory` - Add inventory item
+- `GET /inventory` - Get all inventory items
+- `GET /inventory/{id}` - Get specific inventory item
+- `PUT /inventory/{id}` - Update inventory item
+- `DELETE /inventory/{id}` - Delete inventory item
 
 ### Reports
+- `GET /reports/total-sales` - Get total sales amount
+- `GET /reports/popular-items` - Get popular menu items
 
-* `GET /reports/total-sales` — total revenue from closed orders.
-* `GET /reports/popular-items` — top-selling menu items.
+## Example Usage
 
+### 1. Add Inventory Items
+```bash
+curl -X POST http://localhost:8080/inventory \
+  -H "Content-Type: application/json" \
+  -d '{
+    "ingredient_id": "espresso_shot",
+    "name": "Espresso Shot",
+    "quantity": 500,
+    "unit": "shots"
+  }'
 
-## Inventory Business Rules
+curl -X POST http://localhost:8080/inventory \
+  -H "Content-Type: application/json" \
+  -d '{
+    "ingredient_id": "milk",
+    "name": "Milk",
+    "quantity": 5000,
+    "unit": "ml"
+  }'
+```
 
-1. When creating or closing an order, the service checks stock for all ingredients.
-2. If successful, it deducts the required amounts (`quantity * ingredient quantity`) from `inventory.json`.
-3. If insufficient, the API returns 400 with details about the missing ingredient.
+### 2. Add Menu Items
+```bash
+curl -X POST http://localhost:8080/menu \
+  -H "Content-Type: application/json" \
+  -d '{
+    "product_id": "latte",
+    "name": "Caffe Latte",
+    "description": "Espresso with steamed milk",
+    "price": 3.50,
+    "ingredients": [
+      {
+        "ingredient_id": "espresso_shot",
+        "quantity": 1
+      },
+      {
+        "ingredient_id": "milk",
+        "quantity": 200
+      }
+    ]
+  }'
+```
+
+### 3. Create Order
+```bash
+curl -X POST http://localhost:8080/orders \
+  -H "Content-Type: application/json" \
+  -d '{
+    "customer_name": "John Doe",
+    "items": [
+      {
+        "product_id": "latte",
+        "quantity": 2
+      }
+    ]
+  }'
+```
+
+### 4. Close Order
+```bash
+curl -X POST http://localhost:8080/orders/{order_id}/close
+```
+
+### 5. Get Reports
+```bash
+# Total sales
+curl http://localhost:8080/reports/total-sales
+
+# Popular items
+curl http://localhost:8080/reports/popular-items
+```
+
+## Project Structure
+
+```
+hot-coffee/
+├── cmd/
+│   └── main.go                 # Application entry point
+├── internal/
+│   ├── handler/               # HTTP handlers (Presentation Layer)
+│   │   ├── order_handler.go
+│   │   ├── menu_handler.go
+│   │   ├── inventory_handler.go
+│   │   ├── reports_handler.go
+│   │   └── utils.go
+│   ├── service/               # Business logic (Service Layer)
+│   │   ├── interfaces.go
+│   │   ├── order_service.go
+│   │   ├── menu_service.go
+│   │   ├── inventory_service.go
+│   │   └── reports_service.go
+│   └── repository/            # Data access (Repository Layer)
+│       ├── interfaces.go
+│       ├── order_repository.go
+│       ├── menu_repository.go
+│       └── inventory_repository.go
+├── models/                    # Data models
+│   ├── order.go
+│   ├── menu_item.go
+│   ├── inventory_item.go
+│   └── reports.go
+├── data/                      # JSON data files (created automatically)
+│   ├── orders.json
+│   ├── menu_items.json
+│   └── inventory.json
+├── go.mod
+└── README.md
+```
+
+## Architecture
+
+The application follows a three-layered architecture:
+
+1. **Presentation Layer (Handlers)**: Handles HTTP requests/responses and input validation
+2. **Business Logic Layer (Services)**: Contains core business logic and rules
+3. **Data Access Layer (Repositories)**: Manages data persistence using JSON files
+
+## Data Storage
+
+All data is stored in JSON files within the data directory:
+- `orders.json` - Customer orders
+- `menu_items.json` - Menu items with ingredients
+- `inventory.json` - Ingredient inventory
 
 ## Error Handling
 
-* `200 OK` — successful GET/PUT/DELETE
-* `201 Created` — successful POST
-* `400 Bad Request` — validation, wrong format, or not enough stock
-* `404 Not Found` — resource not found
-* `500 Internal Server Error` — unexpected errors
+The application returns appropriate HTTP status codes:
+- `200 OK` - Successful GET requests
+- `201 Created` - Successful POST requests
+- `204 No Content` - Successful DELETE requests
+- `400 Bad Request` - Invalid input
+- `404 Not Found` - Resource not found
+- `500 Internal Server Error` - Unexpected errors
 
-Example:
+## Logging
 
-```json
-{ "error": "Insufficient inventory for ingredient 'Milk'. Required: 200ml, Available: 150ml." }
-```
-
-## User Quick Start
-
-1. Clone the repository.
-2. Run `go build -o hot-coffee .` in the root.
-3. Start the server: `./hot-coffee --port 8080 --dir ./data`.
-4. Add menu items and inventory via API.
-5. Create orders and test reports.
+Uses Go's `log/slog` package for structured logging with contextual information.

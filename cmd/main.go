@@ -1,4 +1,3 @@
-// cmd/main.go
 package main
 
 import (
@@ -7,81 +6,108 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
-	"time"
+	"strconv"
 
-	"hot-coffee/internal/repo"
-	"hot-coffee/internal/router"
+	"hot-coffee/internal/handler"
+	"hot-coffee/internal/repository"
 	"hot-coffee/internal/service"
-	"hot-coffee/pkg"
 )
 
-var (
-	port = flag.Int("port", 8080, "Port number")
-	dir  = flag.String("dir", "data", "Path to the data directory")
-	help = flag.Bool("help", false, "Show help message")
+const (
+	defaultPort = 8080
+	defaultDir  = "./data"
 )
 
 func main() {
+	var (
+		port     = flag.Int("port", defaultPort, "Port number")
+		dataDir  = flag.String("dir", defaultDir, "Path to the data directory")
+		showHelp = flag.Bool("help", false, "Show this screen")
+	)
+
 	flag.Parse()
 
-	if *help {
+	if *showHelp {
 		printUsage()
-		os.Exit(0)
+		return
 	}
 
-	if err := os.MkdirAll(*dir, 0755); err != nil {
-		slog.Error("failed to create data directory", "err", err)
+	// Setup logger
+	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{
+		Level: slog.LevelInfo,
+	}))
+	slog.SetDefault(logger)
+
+	// Create data directory if it doesn't exist
+	if err := os.MkdirAll(*dataDir, 0755); err != nil {
+		slog.Error("Failed to create data directory", "error", err)
 		os.Exit(1)
 	}
 
-	if *port < 1 || *port > 65535 {
-		slog.Error("incorrect port number", "port", *port)
-		os.Exit(1)
-	}
+	// Initialize repositories
+	orderRepo := repository.NewOrderRepository(*dataDir)
+	menuRepo := repository.NewMenuRepository(*dataDir)
+	inventoryRepo := repository.NewInventoryRepository(*dataDir)
 
-	// Создаем репозитории
-	menuRepo := repo.NewMenuRepository(*dir)
-	orderRepo := repo.NewOrderRepository(*dir)
-	inventoryRepo := repo.NewInventoryRepository(*dir)
-
-	// Создаем сервисы
-	menuService := service.NewMenuService(menuRepo)
+	// Initialize services
 	orderService := service.NewOrderService(orderRepo, menuRepo, inventoryRepo)
+	menuService := service.NewMenuService(menuRepo)
 	inventoryService := service.NewInventoryService(inventoryRepo)
-	reportService := service.NewReportService(orderRepo, menuRepo)
+	reportsService := service.NewReportsService(orderRepo, menuRepo)
 
-	// Создаем роутер
-	r := router.NewRouter(menuService, orderService, inventoryService, reportService)
+	// Initialize handlers
+	orderHandler := handler.NewOrderHandler(orderService)
+	menuHandler := handler.NewMenuHandler(menuService)
+	inventoryHandler := handler.NewInventoryHandler(inventoryService)
+	reportsHandler := handler.NewReportsHandler(reportsService)
 
-	addr := fmt.Sprintf(":%d", *port)
-	srv := &http.Server{
-		Addr:         addr,
-		Handler:      r,
-		ReadTimeout:  5 * time.Second,
-		WriteTimeout: 10 * time.Second,
-		IdleTimeout:  60 * time.Second,
-	}
+	// Setup routes
+	mux := http.NewServeMux()
 
-	pkg.Graceful(srv, 5*time.Second)
+	// Order routes
+	mux.HandleFunc("POST /orders", orderHandler.CreateOrder)
+	mux.HandleFunc("GET /orders", orderHandler.GetAllOrders)
+	mux.HandleFunc("GET /orders/{id}", orderHandler.GetOrder)
+	mux.HandleFunc("PUT /orders/{id}", orderHandler.UpdateOrder)
+	mux.HandleFunc("DELETE /orders/{id}", orderHandler.DeleteOrder)
+	mux.HandleFunc("POST /orders/{id}/close", orderHandler.CloseOrder)
 
-	slog.Info("starting server", "addr", addr, "dataDir", *dir)
+	// Menu routes
+	mux.HandleFunc("POST /menu", menuHandler.CreateMenuItem)
+	mux.HandleFunc("GET /menu", menuHandler.GetAllMenuItems)
+	mux.HandleFunc("GET /menu/{id}", menuHandler.GetMenuItem)
+	mux.HandleFunc("PUT /menu/{id}", menuHandler.UpdateMenuItem)
+	mux.HandleFunc("DELETE /menu/{id}", menuHandler.DeleteMenuItem)
 
-	if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-		slog.Error("server failed", "err", err)
+	// Inventory routes
+	mux.HandleFunc("POST /inventory", inventoryHandler.CreateInventoryItem)
+	mux.HandleFunc("GET /inventory", inventoryHandler.GetAllInventoryItems)
+	mux.HandleFunc("GET /inventory/{id}", inventoryHandler.GetInventoryItem)
+	mux.HandleFunc("PUT /inventory/{id}", inventoryHandler.UpdateInventoryItem)
+	mux.HandleFunc("DELETE /inventory/{id}", inventoryHandler.DeleteInventoryItem)
+
+	// Reports routes
+	mux.HandleFunc("GET /reports/total-sales", reportsHandler.GetTotalSales)
+	mux.HandleFunc("GET /reports/popular-items", reportsHandler.GetPopularItems)
+
+	addr := ":" + strconv.Itoa(*port)
+	slog.Info("Starting server", "port", *port, "data_dir", *dataDir)
+
+	if err := http.ListenAndServe(addr, mux); err != nil {
+		slog.Error("Server failed to start", "error", err)
 		os.Exit(1)
 	}
 }
 
 func printUsage() {
-	fmt.Print(`Coffee Shop Management System
-
-Usage:
-  hot-coffee [--port <N>] [--dir <S>]
-  hot-coffee --help
-
-Options:
-  --help       Show this screen.
-  --port N     Port number.
-  --dir S      Path to the data directory.
-`)
+	fmt.Println("Coffee Shop Management System")
+	fmt.Println()
+	fmt.Println("Usage:")
+	fmt.Println("  hot-coffee [--port <N>] [--dir <S>]")
+	fmt.Println("  hot-coffee --help")
+	fmt.Println()
+	fmt.Println("Options:")
+	fmt.Println("  --help       Show this screen.")
+	fmt.Println("  --port N     Port number.")
+	fmt.Println("  --dir S      Path to the data directory.")
 }
