@@ -1,4 +1,3 @@
-// README.md
 # Hot Coffee - Coffee Shop Management System
 
 A RESTful API service for managing coffee shop operations including orders, menu items, and inventory.
