@@ -1,0 +1,32 @@
+[
+  {
+    "ingredient_id": "coffee_beans",
+    "name": "Coffee Beans",
+    "quantity": 5000,
+    "unit": "g"
+  },
+  {
+    "ingredient_id": "milk",
+    "name": "Milk",
+    "quantity": 3000,
+    "unit": "ml"
+  },
+  {
+    "ingredient_id": "water",
+    "name": "Hot Water",
+    "quantity": 10000,
+    "unit": "ml"
+  },
+  {
+    "ingredient_id": "sugar",
+    "name": "Sugar",
+    "quantity": 2000,
+    "unit": "g"
+  },
+  {
+    "ingredient_id": "vanilla_syrup",
+    "name": "Vanilla Syrup",
+    "quantity": 500,
+    "unit": "ml"
+  }
+]

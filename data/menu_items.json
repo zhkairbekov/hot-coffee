@@ -1,0 +1,54 @@
+[
+  {
+    "product_id": "americano",
+    "name": "Americano",
+    "description": "Espresso diluted with hot water",
+    "price": 2.80,
+    "ingredients": [
+      {
+        "ingredient_id": "coffee_beans",
+        "quantity": 18
+      },
+      {
+        "ingredient_id": "water",
+        "quantity": 200
+      }
+    ]
+  },
+  {
+    "product_id": "latte",
+    "name": "Caffe Latte",
+    "description": "Espresso with steamed milk",
+    "price": 3.50,
+    "ingredients": [
+      {
+        "ingredient_id": "coffee_beans",
+        "quantity": 18
+      },
+      {
+        "ingredient_id": "milk",
+        "quantity": 250
+      }
+    ]
+  },
+  {
+    "product_id": "vanilla_latte",
+    "name": "Vanilla Latte",
+    "description": "Latte with vanilla syrup",
+    "price": 4.00,
+    "ingredients": [
+      {
+        "ingredient_id": "coffee_beans",
+        "quantity": 18
+      },
+      {
+        "ingredient_id": "milk",
+        "quantity": 250
+      },
+      {
+        "ingredient_id": "vanilla_syrup",
+        "quantity": 10
+      }
+    ]
+  }
+]
