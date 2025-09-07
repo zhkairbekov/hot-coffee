@@ -39,7 +39,7 @@ func main() {
 	slog.SetDefault(logger)
 
 	// Create data directory if it doesn't exist
-	if err := os.MkdirAll(*dataDir, 0755); err != nil {
+	if err := os.MkdirAll(*dataDir, 0o755); err != nil {
 		slog.Error("Failed to create data directory", "error", err)
 		os.Exit(1)
 	}

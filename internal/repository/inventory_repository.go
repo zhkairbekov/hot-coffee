@@ -51,7 +51,7 @@ func (r *inventoryRepository) saveInventoryItems(items []*models.InventoryItem) 
 		return err
 	}
 
-	return os.WriteFile(r.getFilePath(), data, 0644)
+	return os.WriteFile(r.getFilePath(), data, 0o644)
 }
 
 func (r *inventoryRepository) Create(item *models.InventoryItem) error {

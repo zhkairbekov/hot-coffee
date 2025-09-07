@@ -51,7 +51,7 @@ func (r *orderRepository) saveOrders(orders []*models.Order) error {
 		return err
 	}
 
-	return os.WriteFile(r.getFilePath(), data, 0644)
+	return os.WriteFile(r.getFilePath(), data, 0o644)
 }
 
 func (r *orderRepository) Create(order *models.Order) error {

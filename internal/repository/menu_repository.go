@@ -51,7 +51,7 @@ func (r *menuRepository) saveMenuItems(items []*models.MenuItem) error {
 		return err
 	}
 
-	return os.WriteFile(r.getFilePath(), data, 0644)
+	return os.WriteFile(r.getFilePath(), data, 0o644)
 }
 
 func (r *menuRepository) Create(item *models.MenuItem) error {

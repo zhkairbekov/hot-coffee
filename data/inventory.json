@@ -2,13 +2,13 @@
   {
     "ingredient_id": "espresso_shot",
     "name": "Espresso Shot",
-    "quantity": 500,
+    "quantity": 490,
     "unit": "shots"
   },
   {
     "ingredient_id": "milk",
     "name": "Milk",
-    "quantity": 5000,
+    "quantity": 2000,
     "unit": "ml"
   },
   {

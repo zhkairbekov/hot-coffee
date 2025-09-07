@@ -1,10 +1,12 @@
 #!/bin/bash
+set -euo pipefail
 
-# Create data directory
-mkdir -p data
+DATA_DIR="${1:-data}" # можно передать путь (по умолчанию ./data)
 
-# Create sample inventory data
-cat > data/inventory.json << 'EOF'
+mkdir -p "$DATA_DIR"
+
+# Inventory
+cat > "$DATA_DIR/inventory.json" << 'EOF'
 [
   {
     "ingredient_id": "espresso_shot",
@@ -57,8 +59,8 @@ cat > data/inventory.json << 'EOF'
 ]
 EOF
 
-# Create sample menu items data
-cat > data/menu_items.json << 'EOF'
+# Menu
+cat > "$DATA_DIR/menu_items.json" << 'EOF'
 [
   {
     "product_id": "latte",
@@ -171,12 +173,9 @@ cat > data/menu_items.json << 'EOF'
 ]
 EOF
 
-# Create empty orders file
-echo '[]' > data/orders.json
+# Orders
+echo '[]' > "$DATA_DIR/orders.json"
 
 echo "Sample data initialized successfully!"
-echo "Files created:"
-echo "  - data/inventory.json"
-echo "  - data/menu_items.json" 
-echo "  - data/orders.json"
-
+echo "Files created in $DATA_DIR:"
+ls -1 "$DATA_DIR"
